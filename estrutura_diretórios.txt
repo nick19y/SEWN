@@ -1,0 +1,14 @@
+sewn-system/
+├── config/database.php          # Configuração PDO
+├── sql/schema.sql              # Script de criação do banco
+├── css/style.css               # Estilos CSS simples
+├── reports/
+│   ├── vendas_cliente.php      # Relatório vendas por cliente
+│   └── estoque_baixo.php       # Relatório estoque baixo
+├── pages/
+│   ├── clientes.php            # CRUD clientes
+│   ├── produtos.php            # CRUD produtos  
+│   ├── vendas.php              # CRUD vendas
+│   └── consultas.php           # 6 consultas SQL avançadas
+├── index.php                   # Página principal
+└── integrantes.txt             # Lista dos integrantes
