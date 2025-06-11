@@ -4,24 +4,25 @@ require_once '../config/database.php';
 if ($_POST) {
     if (isset($_POST['action'])) {
         if ($_POST['action'] === 'add') {
-            $pdo->beginTransaction();
-            try {
-                $stmt = $pdo->prepare("INSERT INTO vendas (cliente_id, data_venda, total) VALUES (?, ?, ?)");
-                $stmt->execute([$_POST['cliente_id'], $_POST['data_venda'], $_POST['total']]);
-                $venda_id = $pdo->lastInsertId();
-                
-                $stmt = $pdo->prepare("INSERT INTO itens_venda (venda_id, produto_id, quantidade, preco_unitario) VALUES (?, ?, ?, ?)");
-                $stmt->execute([$venda_id, $_POST['produto_id'], $_POST['quantidade'], $_POST['preco_unitario']]);
-                
-                $stmt = $pdo->prepare("UPDATE produtos SET estoque = estoque - ? WHERE id = ?");
-                $stmt->execute([$_POST['quantidade'], $_POST['produto_id']]);
-                
-                $pdo->commit();
-                $message = "Venda registrada com sucesso!";
-            } catch (Exception $e) {
-                $pdo->rollback();
-                $error = "Erro ao registrar venda: " . $e->getMessage();
-            }
+            $stmt = $pdo->prepare("INSERT INTO vendas (cliente_id, data_venda, total) VALUES (?, ?, ?)");
+            $stmt->execute([$_POST['cliente_id'], $_POST['data_venda'], $_POST['total']]);
+            $venda_id = $pdo->lastInsertId();
+            
+            $stmt = $pdo->prepare("INSERT INTO itens_venda (venda_id, produto_id, quantidade, preco_unitario) VALUES (?, ?, ?, ?)");
+            $stmt->execute([$venda_id, $_POST['produto_id'], $_POST['quantidade'], $_POST['preco_unitario']]);
+            
+            $stmt = $pdo->prepare("UPDATE produtos SET estoque = estoque - ? WHERE id = ?");
+            $stmt->execute([$_POST['quantidade'], $_POST['produto_id']]);
+            
+            $message = "Venda registrada com sucesso!";
+        } elseif ($_POST['action'] === 'edit') {
+            $stmt = $pdo->prepare("UPDATE vendas SET cliente_id = ?, data_venda = ?, total = ? WHERE id = ?");
+            $stmt->execute([$_POST['cliente_id'], $_POST['data_venda'], $_POST['total'], $_POST['id']]);
+            
+            $stmt = $pdo->prepare("UPDATE itens_venda SET produto_id = ?, quantidade = ?, preco_unitario = ? WHERE venda_id = ?");
+            $stmt->execute([$_POST['produto_id'], $_POST['quantidade'], $_POST['preco_unitario'], $_POST['id']]);
+            
+            $message = "Venda atualizada com sucesso!";
         } elseif ($_POST['action'] === 'delete') {
             $stmt = $pdo->prepare("DELETE FROM itens_venda WHERE venda_id=?");
             $stmt->execute([$_POST['id']]);
@@ -32,15 +33,16 @@ if ($_POST) {
     }
 }
 
-$vendas = $pdo->query("
-    SELECT v.*, c.nome as cliente_nome 
-    FROM vendas v 
-    LEFT JOIN clientes c ON v.cliente_id = c.id 
-    ORDER BY v.data_venda DESC
-")->fetchAll();
+$venda_edit = null;
+if (isset($_GET['edit'])) {
+    $stmt = $pdo->prepare("SELECT v.*, iv.produto_id, iv.quantidade, iv.preco_unitario FROM vendas v LEFT JOIN itens_venda iv ON v.id = iv.venda_id WHERE v.id = ?");
+    $stmt->execute([$_GET['edit']]);
+    $venda_edit = $stmt->fetch();
+}
 
+$vendas = $pdo->query("SELECT v.*, c.nome as cliente_nome FROM vendas v LEFT JOIN clientes c ON v.cliente_id = c.id ORDER BY v.data_venda DESC")->fetchAll();
 $clientes = $pdo->query("SELECT * FROM clientes ORDER BY nome")->fetchAll();
-$produtos = $pdo->query("SELECT * FROM produtos WHERE estoque > 0 ORDER BY nome")->fetchAll();
+$produtos = $pdo->query("SELECT * FROM produtos ORDER BY nome")->fetchAll();
 ?>
 
 <!DOCTYPE html>
@@ -67,45 +69,46 @@ $produtos = $pdo->query("SELECT * FROM produtos WHERE estoque > 0 ORDER BY nome"
         <?php if (isset($message)): ?>
             <div class="alert alert-success"><?= $message ?></div>
         <?php endif; ?>
-        <?php if (isset($error)): ?>
-            <div class="alert alert-error"><?= $error ?></div>
-        <?php endif; ?>
 
-        <h2>Nova Venda</h2>
+        <h2><?= $venda_edit ? 'Editar Venda' : 'Nova Venda' ?></h2>
         <form method="POST">
-            <input type="hidden" name="action" value="add">
+            <input type="hidden" name="action" value="<?= $venda_edit ? 'edit' : 'add' ?>">
+            <?php if ($venda_edit): ?>
+                <input type="hidden" name="id" value="<?= $venda_edit['id'] ?>">
+            <?php endif; ?>
             
             <div class="form-group">
                 <select name="cliente_id" required>
                     <option value="">Selecione o Cliente</option>
                     <?php foreach ($clientes as $cliente): ?>
-                        <option value="<?= $cliente['id'] ?>"><?= $cliente['nome'] ?></option>
+                        <option value="<?= $cliente['id'] ?>" <?= $venda_edit && $venda_edit['cliente_id'] == $cliente['id'] ? 'selected' : '' ?>><?= $cliente['nome'] ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
             <div class="form-group">
-                <input type="date" name="data_venda" required>
+                <input type="date" name="data_venda" value="<?= $venda_edit ? $venda_edit['data_venda'] : '' ?>" required>
             </div>
             <div class="form-group">
-                <select name="produto_id" required onchange="updatePrice(this)">
+                <select name="produto_id" required>
                     <option value="">Selecione o Produto</option>
                     <?php foreach ($produtos as $produto): ?>
-                        <option value="<?= $produto['id'] ?>" data-preco="<?= $produto['preco'] ?>" data-estoque="<?= $produto['estoque'] ?>">
-                            <?= $produto['nome'] ?> - R$ <?= number_format($produto['preco'], 2, ',', '.') ?> (Estoque: <?= $produto['estoque'] ?>)
-                        </option>
+                        <option value="<?= $produto['id'] ?>" <?= $venda_edit && $venda_edit['produto_id'] == $produto['id'] ? 'selected' : '' ?>><?= $produto['nome'] ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
             <div class="form-group">
-                <input type="number" name="quantidade" placeholder="Quantidade" min="1" required onchange="updateTotal()">
+                <input type="number" name="quantidade" placeholder="Quantidade" min="1" value="<?= $venda_edit ? $venda_edit['quantidade'] : '' ?>" required>
             </div>
             <div class="form-group">
-                <input type="number" step="0.01" name="preco_unitario" placeholder="Preço Unitário" required onchange="updateTotal()">
+                <input type="number" step="0.01" name="preco_unitario" placeholder="Preço Unitário" value="<?= $venda_edit ? $venda_edit['preco_unitario'] : '' ?>" required>
             </div>
             <div class="form-group">
-                <input type="number" step="0.01" name="total" placeholder="Total" required readonly>
+                <input type="number" step="0.01" name="total" placeholder="Total" value="<?= $venda_edit ? $venda_edit['total'] : '' ?>" required>
             </div>
-            <button type="submit">Registrar Venda</button>
+            <button type="submit"><?= $venda_edit ? 'Atualizar Venda' : 'Registrar Venda' ?></button>
+            <?php if ($venda_edit): ?>
+                <a href="vendas.php"><button type="button">Cancelar</button></a>
+            <?php endif; ?>
         </form>
 
         <h2>Lista de Vendas</h2>
@@ -127,6 +130,7 @@ $produtos = $pdo->query("SELECT * FROM produtos WHERE estoque > 0 ORDER BY nome"
                     <td><?= date('d/m/Y', strtotime($venda['data_venda'])) ?></td>
                     <td>R$ <?= number_format($venda['total'], 2, ',', '.') ?></td>
                     <td>
+                        <a href="vendas.php?edit=<?= $venda['id'] ?>"><button type="button">Editar</button></a>
                         <form method="POST" style="display:inline;">
                             <input type="hidden" name="action" value="delete">
                             <input type="hidden" name="id" value="<?= $venda['id'] ?>">
@@ -138,25 +142,5 @@ $produtos = $pdo->query("SELECT * FROM produtos WHERE estoque > 0 ORDER BY nome"
             </tbody>
         </table>
     </div>
-
-    <script>
-        function updatePrice(select) {
-            const option = select.options[select.selectedIndex];
-            const preco = option.getAttribute('data-preco');
-            if (preco) {
-                document.querySelector('input[name="preco_unitario"]').value = preco;
-                updateTotal();
-            }
-        }
-
-        function updateTotal() {
-            const quantidade = document.querySelector('input[name="quantidade"]').value;
-            const preco = document.querySelector('input[name="preco_unitario"]').value;
-            if (quantidade && preco) {
-                const total = quantidade * preco;
-                document.querySelector('input[name="total"]').value = total.toFixed(2);
-            }
-        }
-    </script>
 </body>
 </html>
