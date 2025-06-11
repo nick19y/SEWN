@@ -1,7 +1,6 @@
 <?php
 require_once '../config/database.php';
 
-// Referenciar o DomPDF com namespace
 use Dompdf\Dompdf;
 
 if (isset($_GET['pdf'])) {
