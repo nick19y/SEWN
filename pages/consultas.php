@@ -76,9 +76,6 @@ if (isset($_GET['consulta']) && isset($consultas[$_GET['consulta']])) {
 
         <?php if (isset($consulta_selecionada)): ?>
             <h2>Resultado: <?= $consulta_selecionada['titulo'] ?></h2>
-            <div style="background: #f8f9fa; padding: 15px; margin: 10px 0; border-radius: 4px;">
-                <strong>SQL:</strong> <code><?= $consulta_selecionada['sql'] ?></code>
-            </div>
             
             <?php if (!empty($resultados)): ?>
                 <table>
